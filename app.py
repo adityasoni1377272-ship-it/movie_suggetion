@@ -270,6 +270,26 @@ def api_get(path, params=None):
     except requests.RequestException:
         return None
 
+
+def show_poster(poster_url, border_radius="12px", fallback_size="3rem"):
+    """Render a TMDB poster safely without changing the existing UI."""
+    if poster_url:
+        try:
+            response = requests.get(poster_url, timeout=10)
+            response.raise_for_status()
+            st.image(response.content, use_container_width=True)
+            return
+        except (requests.RequestException, ValueError, TypeError):
+            pass
+
+    st.markdown(
+        f"<div style='aspect-ratio:2/3;display:flex;align-items:center;"
+        f"justify-content:center;background:rgba(67,107,0,0.2);"
+        f"border-radius:{border_radius};font-size:{fallback_size};'>🎬</div>",
+        unsafe_allow_html=True
+    )
+
+
 # =============================
 # RENDER FUNCTIONS
 # =============================
@@ -300,26 +320,7 @@ def render_movies(cards, cols=6, key="grid", show_wl=False):
             m = cards[idx]
             with col:
                 st.markdown("<div class='movie-card'>", unsafe_allow_html=True)
-                if m.get("poster_url"):
-                    if m.get("poster_url"):
-                        try:
-                            response = httpx.get(m["poster_url"], timeout=10)
-                            response.raise_for_status()
-                            st.image(response.content, use_container_width=True)
-                        except Exception:
-                            st.markdown(
-                                  "<div style='aspect-ratio:2/3;display:flex;align-items:center;"
-                                 "justify-content:center;background:rgba(67,107,0,0.2);"
-                                 "border-radius:12px;font-size:3rem;'>🎬</div>",
-                                 unsafe_allow_html=True)
-                     else:
-                         st.markdown(
-                             "<div style='aspect-ratio:2/3;display:flex;align-items:center;"
-                             "justify-content:center;background:rgba(67,107,0,0.2);"
-                             "border-radius:12px;font-size:3rem;'>🎬</div>",
-                              unsafe_allow_html=True )
-                else:
-                    st.markdown("<div style='aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;background:rgba(67,107,0,0.2);border-radius:12px;font-size:3rem;'>🎬</div>", unsafe_allow_html=True)
+                show_poster(m.get("poster_url"))
                 st.markdown(f"<div class='movie-title'>{m.get('title', 'Untitled')}</div>", unsafe_allow_html=True)
                 if m.get("vote_average"):
                     st.markdown(f"<div class='movie-rating'>⭐ {m['vote_average']:.1f}</div>", unsafe_allow_html=True)
@@ -507,10 +508,7 @@ elif st.session_state.view == "random":
         
         col1, col2 = st.columns([1, 2])
         with col1:
-            if movie.get("poster_url"):
-                st.image(movie["poster_url"], use_container_width=True)
-            else:
-                st.markdown("<div style='aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;background:rgba(67,107,0,0.2);border-radius:16px;font-size:4rem;'>🎬</div>", unsafe_allow_html=True)
+            show_poster(movie.get("poster_url"), border_radius="16px", fallback_size="4rem")
         with col2:
             st.markdown(f"## {movie.get('title', 'Unknown')}")
             if data and data.get("vote_average"):
@@ -571,10 +569,7 @@ elif st.session_state.view == "details":
     if data:
         col1, col2 = st.columns([1, 2])
         with col1:
-            if data.get("poster_url"):
-                st.image(data["poster_url"], use_container_width=True)
-            else:
-                st.markdown("<div style='aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;background:rgba(67,107,0,0.2);border-radius:16px;font-size:4rem;'>🎬</div>", unsafe_allow_html=True)
+            show_poster(data.get("poster_url"), border_radius="16px", fallback_size="4rem")
         with col2:
             st.markdown(f"## {data.get('title', '')}")
             if data.get("vote_average"):

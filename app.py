@@ -64,7 +64,7 @@ def pick_random_movie():
         data = api_get("/home", {"category": "popular", "limit": 50})
         if data:
             results = data if isinstance(data, list) else data.get("results", [])
-            movies = [{"id": m.get("tmdb_id"), "title": m.get("title", "Unknown"), "poster_url": m.get("poster_url")} for m in results if m.get("tmdb_id")]
+            movies = [{"id": m.get("tmdb_id"), "title": m.get("title", "Unknown"), "poster_url": _extract_poster(m)} for m in results if m.get("tmdb_id")]
     if movies:
         st.session_state.random_movie = random.choice(movies)
         st.toast(f"🎲 Random pick: {st.session_state.random_movie['title']}")
@@ -272,8 +272,27 @@ def api_get(path, params=None):
 
 
 # =============================
-# FIXED: Poster URL normalizer
+# FIXED: Robust poster extractor + normalizer
 # =============================
+def _extract_poster(m):
+    """Look for poster in every possible location of the movie dict."""
+    if not isinstance(m, dict):
+        return None
+    # Direct fields (top level)
+    for k in ("poster_url", "poster_path", "poster", "image", "image_url", "img"):
+        v = m.get(k)
+        if v and isinstance(v, str) and v.strip():
+            return v
+    # Nested under "tmdb"
+    tmdb = m.get("tmdb")
+    if isinstance(tmdb, dict):
+        for k in ("poster_url", "poster_path", "poster", "image"):
+            v = tmdb.get(k)
+            if v and isinstance(v, str) and v.strip():
+                return v
+    return None
+
+
 def _normalize_poster(url):
     """Normalize poster URL: handle None, relative paths, and full URLs."""
     if not url or not isinstance(url, str):
@@ -281,25 +300,22 @@ def _normalize_poster(url):
     url = url.strip()
     if not url:
         return None
-    if url.startswith("/"):
-        return f"{TMDB_IMG}{url}"
     if url.startswith("http://") or url.startswith("https://"):
         return url
-    # bare path without leading slash (e.g. "abc.jpg")
+    if url.startswith("/"):
+        return f"{TMDB_IMG}{url}"
     return f"{TMDB_IMG}/{url.lstrip('/')}"
 
 
 def show_poster(poster_url, border_radius="12px", fallback_size="3rem"):
     """Render a poster safely without changing the existing card UI."""
     final_url = _normalize_poster(poster_url)
-
     if final_url:
         try:
             st.image(final_url, use_container_width=True)
             return
         except Exception:
             pass
-
     st.markdown(
         f"<div style='aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;"
         f"background:rgba(67,107,0,0.2);border-radius:{border_radius};font-size:{fallback_size};'>🎬</div>",
@@ -337,8 +353,8 @@ def render_movies(cards, cols=6, key="grid", show_wl=False):
             m = cards[idx]
             with col:
                 st.markdown("<div class='movie-card'>", unsafe_allow_html=True)
-                # FIXED: normalize poster using poster_path fallback
-                poster = m.get("poster_url") or m.get("poster_path")
+                # FIXED: robust poster extraction
+                poster = _extract_poster(m)
                 show_poster(poster)
                 st.markdown(f"<div class='movie-title'>{m.get('title', 'Untitled')}</div>", unsafe_allow_html=True)
                 if m.get("vote_average"):
@@ -348,11 +364,11 @@ def render_movies(cards, cols=6, key="grid", show_wl=False):
                     in_wl = m["tmdb_id"] in [x["id"] for x in st.session_state.watchlist]
                     if not in_wl:
                         if st.button("➕ Add", key=f"wl_{key}_{idx}", use_container_width=True):
-                            add_watchlist(m["tmdb_id"], m.get("title", ""), m.get("poster_url"))
+                            add_watchlist(m["tmdb_id"], m.get("title", ""), poster)
                             st.rerun()
                 
                 # <--- FIXED ONE-CLICK: Using on_click callback to guarantee the transition
-                st.button("▶ Open", key=f"open_{key}_{idx}", use_container_width=True, on_click=lambda mid=m["tmdb_id"], title=m.get("title", "Unknown"), poster=m.get("poster_url"): (
+                st.button("▶ Open", key=f"open_{key}_{idx}", use_container_width=True, on_click=lambda mid=m["tmdb_id"], title=m.get("title", "Unknown"), poster=poster: (
                     add_recently_viewed(mid, title, poster),
                     goto("details", mid)
                 ))
@@ -401,7 +417,7 @@ if st.session_state.view == "home":
             cards = [{
                 "tmdb_id": m.get("id") or m.get("tmdb_id"),
                 "title": m.get("title", "Unknown"),
-                "poster_url": (m.get("poster_url") or (f"{TMDB_IMG}{m.get('poster_path')}" if m.get("poster_path") else None)),
+                "poster_url": _extract_poster(m),
                 "vote_average": m.get("vote_average")
             } for m in all_results[:50]]
             render_movies(cards, cols=grid_cols, key="search", show_wl=True)
@@ -527,7 +543,7 @@ elif st.session_state.view == "random":
         
         col1, col2 = st.columns([1, 2])
         with col1:
-            show_poster(movie.get("poster_url"), border_radius="16px", fallback_size="4rem")
+            show_poster(_extract_poster(data) if data else movie.get("poster_url"), border_radius="16px", fallback_size="4rem")
         with col2:
             st.markdown(f"## {movie.get('title', 'Unknown')}")
             if data and data.get("vote_average"):
@@ -588,7 +604,7 @@ elif st.session_state.view == "details":
     if data:
         col1, col2 = st.columns([1, 2])
         with col1:
-            show_poster(data.get("poster_url") or data.get("poster_path"), border_radius="16px", fallback_size="4rem")
+            show_poster(_extract_poster(data), border_radius="16px", fallback_size="4rem")
         with col2:
             st.markdown(f"## {data.get('title', '')}")
             if data.get("vote_average"):
@@ -604,7 +620,7 @@ elif st.session_state.view == "details":
             col_btn1, col_btn2 = st.columns(2)
             with col_btn1:
                 if st.button("✅ Remove" if in_wl else "➕ Add to Watchlist", use_container_width=True):
-                    remove_watchlist(movie_id) if in_wl else add_watchlist(movie_id, data.get("title", ""), data.get("poster_url"))
+                    remove_watchlist(movie_id) if in_wl else add_watchlist(movie_id, data.get("title", ""), _extract_poster(data))
                     st.rerun()
             with col_btn2:
                 st.button("← Back", on_click=lambda: goto("home"), use_container_width=True)
@@ -633,17 +649,19 @@ elif st.session_state.view == "details":
                 cards = []
                 for rec in recs:
                     if bundle.get("genre_recommendations"):
-                        cards.append({"tmdb_id": rec.get("tmdb_id"), "title": rec.get("title", "Unknown"), "poster_url": rec.get("poster_url"), "poster_path": rec.get("poster_path"), "vote_average": rec.get("vote_average")})
+                        cards.append({
+                            "tmdb_id": rec.get("tmdb_id"),
+                            "title": rec.get("title", "Unknown"),
+                            "poster_url": _extract_poster(rec),
+                            "vote_average": rec.get("vote_average")
+                        })
                     else:
                         tmdb = rec.get("tmdb", {})
                         if tmdb.get("tmdb_id"):
-                            cards.append({"tmdb_id": tmdb.get("tmdb_id"), "title": tmdb.get("title") or rec.get("title", "Unknown"), "poster_url": tmdb.get("poster_url"), "poster_path": tmdb.get("poster_path"), "vote_average": tmdb.get("vote_average")})
-                render_movies(cards, cols=min(grid_cols, 6), key="recs", show_wl=True) if cards else st.info("No recommendations available for this movie.")
-            else:
-                st.info("No recommendations available for this movie.")
-        elif bundle is None and not st.session_state.loading_state.get(rec_key, False):
-            st.info("Could not load recommendations. Please try again later.")
-            
-    elif data is None and not st.session_state.loading_state.get(detail_key, False):
-        st.error("Movie not found.")
-        st
+                            cards.append({
+                                "tmdb_id": tmdb.get("tmdb_id"),
+                                "title": tmdb.get("title") or rec.get("title", "Unknown"),
+                                "poster_url": _extract_poster(tmdb) or _extract_poster(rec),
+                                "vote_average": tmdb.get("vote_average")
+                            })
+                render_movies(c

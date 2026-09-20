@@ -646,11 +646,4 @@ elif st.session_state.view == "details":
             
     elif data is None and not st.session_state.loading_state.get(detail_key, False):
         st.error("Movie not found.")
-        st.button("← Back", on_click=lambda: goto("home"))
-        st.stop()
-
-# Footer
-st.markdown(
-    <div class="footer">
-        "🎬" <span>Moovie
-)
+        st

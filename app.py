@@ -301,7 +301,10 @@ def render_movies(cards, cols=6, key="grid", show_wl=False):
             with col:
                 st.markdown("<div class='movie-card'>", unsafe_allow_html=True)
                 if m.get("poster_url"):
-                    st.image(m["poster_url"], use_container_width=True)
+                    if m.get("poster_url"):
+                        st.image(m["poster_url"], use_container_width=True)
+                    else:
+                        st.write("No poster available")
                 else:
                     st.markdown("<div style='aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;background:rgba(67,107,0,0.2);border-radius:12px;font-size:3rem;'>🎬</div>", unsafe_allow_html=True)
                 st.markdown(f"<div class='movie-title'>{m.get('title', 'Untitled')}</div>", unsafe_allow_html=True)

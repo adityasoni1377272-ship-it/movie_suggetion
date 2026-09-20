@@ -306,7 +306,7 @@ def render_movies(cards, cols=6, key="grid", show_wl=False):
                             response = httpx.get(m["poster_url"], timeout=10)
                             response.raise_for_status()
                             st.image(response.content, use_container_width=True)
-                       except Exception:
+                        except Exception:
                             st.markdown(
                                   "<div style='aspect-ratio:2/3;display:flex;align-items:center;"
                                  "justify-content:center;background:rgba(67,107,0,0.2);"

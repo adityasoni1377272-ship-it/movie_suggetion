@@ -665,3 +665,4 @@ elif st.session_state.view == "details":
                                 "vote_average": tmdb.get("vote_average")
                             })
                 render_movies(c
+                             )

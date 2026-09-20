@@ -271,13 +271,33 @@ def api_get(path, params=None):
         return None
 
 
+# =============================
+# FIXED: Poster URL normalizer
+# =============================
+def _normalize_poster(url):
+    """Normalize poster URL: handle None, relative paths, and full URLs."""
+    if not url or not isinstance(url, str):
+        return None
+    url = url.strip()
+    if not url:
+        return None
+    if url.startswith("/"):
+        return f"{TMDB_IMG}{url}"
+    if url.startswith("http://") or url.startswith("https://"):
+        return url
+    # bare path without leading slash (e.g. "abc.jpg")
+    return f"{TMDB_IMG}/{url.lstrip('/')}"
+
+
 def show_poster(poster_url, border_radius="12px", fallback_size="3rem"):
     """Render a poster safely without changing the existing card UI."""
-    if isinstance(poster_url, str) and poster_url.strip():
+    final_url = _normalize_poster(poster_url)
+
+    if final_url:
         try:
-            st.image(poster_url, use_container_width=True)
+            st.image(final_url, use_container_width=True)
             return
-        except (TypeError, ValueError):
+        except Exception:
             pass
 
     st.markdown(
@@ -317,7 +337,9 @@ def render_movies(cards, cols=6, key="grid", show_wl=False):
             m = cards[idx]
             with col:
                 st.markdown("<div class='movie-card'>", unsafe_allow_html=True)
-                show_poster(m.get("poster_url"))
+                # FIXED: normalize poster using poster_path fallback
+                poster = m.get("poster_url") or m.get("poster_path")
+                show_poster(poster)
                 st.markdown(f"<div class='movie-title'>{m.get('title', 'Untitled')}</div>", unsafe_allow_html=True)
                 if m.get("vote_average"):
                     st.markdown(f"<div class='movie-rating'>⭐ {m['vote_average']:.1f}</div>", unsafe_allow_html=True)
@@ -566,7 +588,7 @@ elif st.session_state.view == "details":
     if data:
         col1, col2 = st.columns([1, 2])
         with col1:
-            show_poster(data.get("poster_url"), border_radius="16px", fallback_size="4rem")
+            show_poster(data.get("poster_url") or data.get("poster_path"), border_radius="16px", fallback_size="4rem")
         with col2:
             st.markdown(f"## {data.get('title', '')}")
             if data.get("vote_average"):
@@ -611,11 +633,11 @@ elif st.session_state.view == "details":
                 cards = []
                 for rec in recs:
                     if bundle.get("genre_recommendations"):
-                        cards.append({"tmdb_id": rec.get("tmdb_id"), "title": rec.get("title", "Unknown"), "poster_url": rec.get("poster_url"), "vote_average": rec.get("vote_average")})
+                        cards.append({"tmdb_id": rec.get("tmdb_id"), "title": rec.get("title", "Unknown"), "poster_url": rec.get("poster_url"), "poster_path": rec.get("poster_path"), "vote_average": rec.get("vote_average")})
                     else:
                         tmdb = rec.get("tmdb", {})
                         if tmdb.get("tmdb_id"):
-                            cards.append({"tmdb_id": tmdb.get("tmdb_id"), "title": tmdb.get("title") or rec.get("title", "Unknown"), "poster_url": tmdb.get("poster_url"), "vote_average": tmdb.get("vote_average")})
+                            cards.append({"tmdb_id": tmdb.get("tmdb_id"), "title": tmdb.get("title") or rec.get("title", "Unknown"), "poster_url": tmdb.get("poster_url"), "poster_path": tmdb.get("poster_path"), "vote_average": tmdb.get("vote_average")})
                 render_movies(cards, cols=min(grid_cols, 6), key="recs", show_wl=True) if cards else st.info("No recommendations available for this movie.")
             else:
                 st.info("No recommendations available for this movie.")
@@ -631,8 +653,4 @@ elif st.session_state.view == "details":
 st.markdown(
     """
     <div class="footer">
-        🎬 <span>Moovieez</span> · Made with ❤️ · © 2026
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+        🎬 <span>Moovie

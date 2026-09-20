@@ -653,3 +653,4 @@ elif st.session_state.view == "details":
 st.markdown(
     <div class="footer">
         "🎬" <span>Moovie
+)

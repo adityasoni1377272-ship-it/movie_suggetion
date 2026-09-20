@@ -652,4 +652,4 @@ elif st.session_state.view == "details":
 # Footer
 st.markdown(
     <div class="footer">
-        🎬 <span>Moovie
+        "🎬" <span>Moovie

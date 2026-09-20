@@ -272,20 +272,17 @@ def api_get(path, params=None):
 
 
 def show_poster(poster_url, border_radius="12px", fallback_size="3rem"):
-    """Render a TMDB poster safely without changing the existing UI."""
-    if poster_url:
+    """Render a poster safely without changing the existing card UI."""
+    if isinstance(poster_url, str) and poster_url.strip():
         try:
-            response = requests.get(poster_url, timeout=10)
-            response.raise_for_status()
-            st.image(response.content, use_container_width=True)
+            st.image(poster_url, use_container_width=True)
             return
-        except (requests.RequestException, ValueError, TypeError):
+        except (TypeError, ValueError):
             pass
 
     st.markdown(
-        f"<div style='aspect-ratio:2/3;display:flex;align-items:center;"
-        f"justify-content:center;background:rgba(67,107,0,0.2);"
-        f"border-radius:{border_radius};font-size:{fallback_size};'>🎬</div>",
+        f"<div style='aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;"
+        f"background:rgba(67,107,0,0.2);border-radius:{border_radius};font-size:{fallback_size};'>🎬</div>",
         unsafe_allow_html=True
     )
 
@@ -382,7 +379,7 @@ if st.session_state.view == "home":
             cards = [{
                 "tmdb_id": m.get("id") or m.get("tmdb_id"),
                 "title": m.get("title", "Unknown"),
-                "poster_url": m.get("poster_url") or f"{TMDB_IMG}{m.get('poster_path')}" if m.get("poster_path") else None,
+                "poster_url": (m.get("poster_url") or (f"{TMDB_IMG}{m.get('poster_path')}" if m.get("poster_path") else None)),
                 "vote_average": m.get("vote_average")
             } for m in all_results[:50]]
             render_movies(cards, cols=grid_cols, key="search", show_wl=True)

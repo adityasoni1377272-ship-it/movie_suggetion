@@ -272,18 +272,16 @@ def api_get(path, params=None):
 
 
 # =============================
-# FIXED: Robust poster extractor + normalizer
+# Poster helper: extract + normalize + render as raw HTML
 # =============================
 def _extract_poster(m):
     """Look for poster in every possible location of the movie dict."""
     if not isinstance(m, dict):
         return None
-    # Direct fields (top level)
     for k in ("poster_url", "poster_path", "poster", "image", "image_url", "img"):
         v = m.get(k)
         if v and isinstance(v, str) and v.strip():
             return v
-    # Nested under "tmdb"
     tmdb = m.get("tmdb")
     if isinstance(tmdb, dict):
         for k in ("poster_url", "poster_path", "poster", "image"):
@@ -308,14 +306,23 @@ def _normalize_poster(url):
 
 
 def show_poster(poster_url, border_radius="12px", fallback_size="3rem"):
-    """Render a poster safely without changing the existing card UI."""
+    """Render a poster as raw HTML <img> so our card CSS applies cleanly."""
     final_url = _normalize_poster(poster_url)
     if final_url:
-        try:
-            st.image(final_url, use_container_width=True)
-            return
-        except Exception:
-            pass
+        # Raw HTML img with onerror fallback -> guarantees the CSS in .movie-card applies
+        fallback_html = (
+            f"<div style='aspect-ratio:2/3;display:flex;align-items:center;"
+            f"justify-content:center;background:rgba(67,107,0,0.2);"
+            f"border-radius:{border_radius};font-size:{fallback_size};'>🎬</div>"
+        ).replace("'", "&#39;")
+        st.markdown(
+            f"<img src='{final_url}' "
+            f"style='width:100%;aspect-ratio:2/3;object-fit:cover;border-radius:{border_radius};display:block;margin:0 auto;' "
+            f"onerror=\"this.onerror=null;this.outerHTML='{fallback_html}'\" />",
+            unsafe_allow_html=True
+        )
+        return
+
     st.markdown(
         f"<div style='aspect-ratio:2/3;display:flex;align-items:center;justify-content:center;"
         f"background:rgba(67,107,0,0.2);border-radius:{border_radius};font-size:{fallback_size};'>🎬</div>",
@@ -353,7 +360,6 @@ def render_movies(cards, cols=6, key="grid", show_wl=False):
             m = cards[idx]
             with col:
                 st.markdown("<div class='movie-card'>", unsafe_allow_html=True)
-                # FIXED: robust poster extraction
                 poster = _extract_poster(m)
                 show_poster(poster)
                 st.markdown(f"<div class='movie-title'>{m.get('title', 'Untitled')}</div>", unsafe_allow_html=True)
@@ -367,7 +373,6 @@ def render_movies(cards, cols=6, key="grid", show_wl=False):
                             add_watchlist(m["tmdb_id"], m.get("title", ""), poster)
                             st.rerun()
                 
-                # <--- FIXED ONE-CLICK: Using on_click callback to guarantee the transition
                 st.button("▶ Open", key=f"open_{key}_{idx}", use_container_width=True, on_click=lambda mid=m["tmdb_id"], title=m.get("title", "Unknown"), poster=poster: (
                     add_recently_viewed(mid, title, poster),
                     goto("details", mid)
@@ -378,7 +383,6 @@ def render_movies(cards, cols=6, key="grid", show_wl=False):
 # PAGE HELPER for LOADING
 # =============================
 def load_data_with_skeleton(key, fetch_func, cols):
-    # Check if we need to load
     if st.session_state.loading_state.get(key, False):
         render_skeletons(cols=cols)
         data = fetch_func()
@@ -400,7 +404,6 @@ if st.session_state.view == "home":
     st.markdown('<div class="section-title">🔍 Find Your Next Movie</div>', unsafe_allow_html=True)
     query = st_keyup("", placeholder="Search by title... (e.g., 'deadpool' or 'avatar')", label_visibility="collapsed", debounce=300, key="search")
     
-    # SEARCH
     if query and len(query) >= 2:
         data = api_get("/tmdb/search", {"query": query})
         all_results = data.get("results", []) if data else []
@@ -425,12 +428,10 @@ if st.session_state.view == "home":
             st.info(f"No movies found for '{query}'. Try a different search term.")
         st.stop()
     
-    # FEED
     st.markdown(f"### {selected_label}")
     if "prev_home_category" not in st.session_state:
         st.session_state.prev_home_category = home_category
     
-    # Trigger reload if category changed
     if st.session_state.prev_home_category != home_category:
         st.session_state.cached_data.pop("home_feed", None)
         st.session_state.loading_state.pop("home_feed", None)
@@ -478,8 +479,6 @@ elif st.session_state.view == "watchlist":
     
     st.caption(f"🎯 {len(st.session_state.watchlist)} movies saved")
     watchlist_movies = [{"tmdb_id": m["id"], "title": m["title"], "poster_url": m["poster_url"]} for m in st.session_state.watchlist]
-    
-    # If watchlist exists, we don't need a fetch skeleton, just render directly
     render_movies(watchlist_movies, cols=min(grid_cols, 4), key="wl", show_wl=True)
     
     col1, col2, col3 = st.columns([1,2,1])
@@ -499,8 +498,6 @@ elif st.session_state.view == "recently_viewed":
     
     st.caption(f"🎯 {len(st.session_state.recently_viewed)} movies viewed recently")
     recent_movies = [{"tmdb_id": m["id"], "title": m["title"], "poster_url": m["poster_url"]} for m in st.session_state.recently_viewed]
-    
-    # No fetch needed here, just render
     render_movies(recent_movies, cols=min(grid_cols, 4), key="recent", show_wl=True)
     
     col1, col2, col3 = st.columns([1,2,1])
@@ -524,7 +521,6 @@ elif st.session_state.view == "random":
         movie = st.session_state.random_movie
         st.divider()
         
-        # Add skeleton loading for movie details
         detail_key = f"details_{movie['id']}"
         if "prev_random_id" not in st.session_state:
             st.session_state.prev_random_id = None
@@ -567,7 +563,6 @@ elif st.session_state.view == "random":
                     remove_watchlist(movie["id"]) if in_wl else add_watchlist(movie["id"], movie.get("title", ""), movie.get("poster_url"))
                     st.rerun()
             with col_btn3:
-                # <--- FIXED ONE-CLICK: Using on_click callback here too for consistency
                 st.button("▶ Open Details", use_container_width=True, on_click=lambda mid=movie["id"], title=movie.get("title", "Unknown"), poster=movie.get("poster_url"): (
                     add_recently_viewed(mid, title, poster),
                     goto("details", mid)
@@ -584,7 +579,6 @@ elif st.session_state.view == "details":
         goto("home")
         st.stop()
     
-    # Load movie detail with skeleton
     detail_key = f"details_{movie_id}"
     if "prev_detail_id" not in st.session_state:
         st.session_state.prev_detail_id = None
@@ -628,13 +622,11 @@ elif st.session_state.view == "details":
         st.divider()
         st.markdown("### 🎯 You might also like")
         
-        # Add skeleton loading for recommendations too!
         rec_key = f"recs_{movie_id}"
         if st.session_state.get("prev_rec_id", None) != movie_id:
             st.session_state.cached_data.pop(rec_key, None)
             st.session_state.loading_state.pop(rec_key, None)
             st.session_state.prev_rec_id = movie_id
-            # We use a separate flag to not conflict with detail load
             st.session_state.loading_state[rec_key] = True
             st.rerun()
 
@@ -664,5 +656,23 @@ elif st.session_state.view == "details":
                                 "poster_url": _extract_poster(tmdb) or _extract_poster(rec),
                                 "vote_average": tmdb.get("vote_average")
                             })
-                render_movies(c
-                             )
+                render_movies(cards, cols=min(grid_cols, 6), key="recs", show_wl=True) if cards else st.info("No recommendations available for this movie.")
+            else:
+                st.info("No recommendations available for this movie.")
+        elif bundle is None and not st.session_state.loading_state.get(rec_key, False):
+            st.info("Could not load recommendations. Please try again later.")
+            
+    elif data is None and not st.session_state.loading_state.get(detail_key, False):
+        st.error("Movie not found.")
+        st.button("← Back", on_click=lambda: goto("home"))
+        st.stop()
+
+# Footer
+st.markdown(
+    """
+    <div class="footer">
+        🎬 <span>Moovieez</span> · Made with ❤️ · © 2026
+    </div>
+    """,
+    unsafe_allow_html=True
+)
